@@ -86,22 +86,32 @@ class DocumentService {
 
   List<String> _chunkText(String text, int chunkSize) {
     List<String> chunks = [];
-    // Very basic chunking by length. 
-    // Ideally should be sentence boundary aware or recursive character text splitter.
-    
-    // Clean text key
     final cleanText = text.replaceAll(RegExp(r'\s+'), ' ').trim();
     
-    for (int i = 0; i < cleanText.length; i += chunkSize) {
-      int end = (i + chunkSize < cleanText.length) ? i + chunkSize : cleanText.length;
-      chunks.add(cleanText.substring(i, end));
+    int start = 0;
+    while (start < cleanText.length) {
+      int end = start + chunkSize;
+      
+      if (end >= cleanText.length) {
+        chunks.add(cleanText.substring(start));
+        break;
+      }
+      
+      // Backtrack to last space to avoid splitting words
+      int lastSpace = cleanText.lastIndexOf(' ', end);
+      if (lastSpace != -1 && lastSpace > start) {
+        end = lastSpace;
+      }
+      
+      chunks.add(cleanText.substring(start, end).trim());
+      start = end + 1; // Skip the space
     }
     return chunks;
   }
 
-  Future<List<String>> retrieveRelevantContext(String query, {int limit = 3}) async {
+  Future<List<String>> retrieveRelevantContext(String query, {int limit = 5}) async {
     final queryEmbedding = await _aiService.getEmbeddings(query);
-    final allChunks = await _repository.getAllChunks(); // Ineffecient for production, OK for MVP
+    final allChunks = await _repository.getAllChunks(); // Note: Inefficient for large scale, fix later
 
     final scoredChunks = allChunks.map((chunk) {
       if (chunk.embedding == null) return MapEntry(chunk, -1.0);

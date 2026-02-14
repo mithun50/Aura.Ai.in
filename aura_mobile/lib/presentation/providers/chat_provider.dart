@@ -6,6 +6,7 @@ import 'package:aura_mobile/domain/services/memory_service.dart';
 import 'package:aura_mobile/domain/services/document_service.dart';
 import 'package:aura_mobile/domain/services/context_builder_service.dart';
 import 'package:aura_mobile/core/services/voice_service.dart';
+import 'package:aura_mobile/features/orchestrator/orchestrator_service.dart';
 import 'package:aura_mobile/core/providers/ai_providers.dart';
 
 // Voice Service

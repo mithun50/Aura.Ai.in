@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:fllama/fllama.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
+import 'package:dio/dio.dart';
 
 class DownloadUpdate {
   final String id;
@@ -38,58 +39,39 @@ class RunAnywhere {
 
 
 
+  // NATIVE DOWNLOAD IMPLEMENTATION (Using FlutterDownloader for Background Support)
+  
   /// Download model from URL to local path
   /// Returns the taskId for the download
   Future<String?> downloadModel(String url, String destinationPath) async {
-    print('RunAnywhere: downloadModel called for $url');
     if (!_isInitialized) {
         await initialize();
     }
-
-    final tasks = await FlutterDownloader.loadTasks();
-    final fileName = destinationPath.split('/').last;
-    final saveDir = destinationPath.substring(0, destinationPath.lastIndexOf('/'));
-
-    // Check for existing tasks to avoid duplicates
-    if (tasks != null) {
-      var activeTasks = tasks.where((task) => 
-        task.url == url && 
-        (task.status == DownloadTaskStatus.running || 
-         task.status == DownloadTaskStatus.enqueued || 
-         task.status == DownloadTaskStatus.paused)
-      ).toList();
-
-      if (activeTasks.isNotEmpty) {
-        if (activeTasks.length == 1) {
-          print('RunAnywhere: Found existing active task: ${activeTasks.first.taskId}');
-          return activeTasks.first.taskId;
-        } else {
-          print('RunAnywhere: Found multiple active tasks (${activeTasks.length}). Cleaning up...');
-          // Cancel all to prevent corruption and start fresh
-          for (var task in activeTasks) {
-            await FlutterDownloader.cancel(taskId: task.taskId);
-          }
-          // Fall through to create new task
-        }
-      }
+    
+    // Ensure directory exists
+    final file = File(destinationPath);
+    final directory = file.parent;
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
     }
-
-    if (kDebugMode) print('RunAnywhere: Starting download: $url -> $saveDir/$fileName');
-
+    
     try {
-        final taskId = await FlutterDownloader.enqueue(
-          url: url,
-          savedDir: saveDir,
-          fileName: fileName,
-          showNotification: true,
-          openFileFromNotification: false,
-          saveInPublicStorage: false,
-        );
-        print('RunAnywhere: Enqueue success, taskId: $taskId');
-        return taskId;
+      if (kDebugMode) print('RunAnywhere: Starting FlutterDownloader: $url -> ${directory.path}');
+
+      final taskId = await FlutterDownloader.enqueue(
+        url: url,
+        savedDir: directory.path,
+        fileName: file.uri.pathSegments.last, 
+        showNotification: true,
+        openFileFromNotification: false,
+        saveInPublicStorage: false,
+      );
+      
+      return taskId;
+      
     } catch (e) {
-        print('RunAnywhere: Enqueue failed: $e');
-        rethrow;
+      print('RunAnywhere: Download Enqueue Failed: $e');
+      return null;
     }
   }
 
@@ -100,6 +82,7 @@ class RunAnywhere {
 
   @pragma('vm:entry-point')
   static void downloadCallback(String id, int status, int progress) {
+    print('Background Isolate Callback: $id, $status, $progress'); // Debug log
     final SendPort? send = IsolateNameServer.lookupPortByName('downloader_send_port');
     send?.send([id, status, progress]);
   }
@@ -172,9 +155,9 @@ class RunAnywhere {
 
     // Handle Asset Path
     if (modelPath.startsWith('assets/')) {
-      final docsDir = await getApplicationDocumentsDirectory();
-      final filename = modelPath.split('/').last;
-      final file = File('${docsDir.path}/$filename');
+       final docsDir = await getApplicationDocumentsDirectory();
+       final filename = modelPath.split('/').last;
+       final file = File('${docsDir.path}/$filename');
       
       if (!await file.exists()) {
         if (kDebugMode) print('Copying model from assets to ${file.path}...');
@@ -190,12 +173,22 @@ class RunAnywhere {
       }
       finalPath = file.path;
     }
-
+    
+    // Check if path exists, if not, try appending the correct base directory
     if (!File(finalPath).existsSync()) {
-      await Future.delayed(const Duration(seconds: 1));
-      if (!File(finalPath).existsSync()) {
-        throw Exception('Model file not found at $finalPath');
-      }
+        // If passed just a filename or relative path, try to find it in our storage dir
+         final docsDir = await getApplicationDocumentsDirectory();
+         final alternatePath = "${docsDir.path}/${finalPath.split('/').last}";
+         
+         if (File(alternatePath).existsSync()) {
+            finalPath = alternatePath;
+         } else {
+             await Future.delayed(const Duration(seconds: 1));
+             if (!File(finalPath).existsSync()) {
+                 print("Critical: Model not found at $finalPath or $alternatePath");
+                 throw Exception('Model file not found');
+             }
+         }
     }
 
     // Release previous context if any
@@ -226,7 +219,7 @@ class RunAnywhere {
           } else if (result.containsKey('id')) {
              _contextId = (result['id'] as num).toDouble();
           } else {
-             print("Warning: Context ID not found in result.");
+             print("Warning: Context ID not found in result keys: ${result.keys}");
           }
       } else {
           throw Exception("Fllama initContext returned null");
@@ -235,6 +228,12 @@ class RunAnywhere {
       _currentModelPath = finalPath;
       
       if (kDebugMode) print('Llama model loaded successfully. Context ID: $_contextId');
+      
+      // Safety check
+      if (_contextId == null) {
+          throw Exception("Failed to extract context ID from Fllama result: $result");
+      }
+
     } catch (e) {
       print('CRITICAL: Failed to initialize Llama: $e');
       throw Exception('Failed to load native Llama engine. Error: $e');
@@ -250,9 +249,23 @@ class RunAnywhere {
     if (!_isInitialized) throw Exception('RunAnywhere not initialized');
     if (_contextId == null) throw Exception('No model loaded');
 
-    final fullPrompt = systemPrompt != null 
-        ? '$systemPrompt\n\nUser: $prompt\nAssistant:' 
-        : 'User: $prompt\nAssistant:';
+    // Default to ChatML format (Standard for SmolLM2, Qwen, DeepSeek, TinyLlama 1.1 Chat)
+    // Format: <|im_start|>system\n{system}\n<|im_end|>\n<|im_start|>user\n{user}\n<|im_end|>\n<|im_start|>assistant\n
+    
+    final StringBuffer promptBuffer = StringBuffer();
+    
+    if (systemPrompt != null && systemPrompt.isNotEmpty) {
+      promptBuffer.write('<|im_start|>system\n$systemPrompt\n<|im_end|>\n');
+    }
+    
+    promptBuffer.write('<|im_start|>user\n$prompt\n<|im_end|>\n');
+    promptBuffer.write('<|im_start|>assistant\n');
+    
+    final fullPrompt = promptBuffer.toString();
+    
+    if (kDebugMode) {
+      print('RunAnywhere: Sending Prompt: $fullPrompt');
+    }
 
     final controller = StreamController<String>();
     
@@ -261,6 +274,7 @@ class RunAnywhere {
         if (data.containsKey('token')) {
             final token = data['token'] as String?;
             if (token != null) {
+                if (kDebugMode) stdout.write(token); // Log tokens inline
                 controller.add(token);
             }
         }
@@ -270,7 +284,7 @@ class RunAnywhere {
       await Fllama.instance()?.completion(
         _contextId!,
         prompt: fullPrompt,
-        stop: ["User:", "\nUser", "System:"],
+        stop: ["<|im_end|>", "<|im_start|>", "User:", "System:"], // Add ChatML stop tokens
         temperature: 0.7,
         topP: 0.9,
         nPredict: maxTokens,
@@ -280,8 +294,9 @@ class RunAnywhere {
       print('Error during inference: $e');
       controller.add(" [Error: $e]");
     } finally {
-       await subscription?.cancel();
-       controller.close();
+      if (kDebugMode) print('\nRunAnywhere: Generation Complete');
+      await subscription?.cancel();
+      controller.close();
     }
     
     yield* controller.stream;

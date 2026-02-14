@@ -160,24 +160,50 @@ class ModelSelectorNotifier extends StateNotifier<ModelSelectorState> {
        }
     }
 
-    // Get active model
-    // Validate active model is actually downloaded
-    String? activeModelId = prefs.getString('active_model_id');
-    if (activeModelId != null && !downloadedIds.contains(activeModelId)) {
-        activeModelId = null;
+    // Get active model candidate
+    String? activeModelIdCandidate = prefs.getString('active_model_id');
+    if (activeModelIdCandidate != null && !downloadedIds.contains(activeModelIdCandidate)) {
+        activeModelIdCandidate = null;
         await prefs.remove('active_model_id');
     }
 
     // Get total storage
     final totalStorage = await modelManager.getTotalStorageUsed();
 
+    // Set initial state WITHOUT active model to prevent UI mismatch
     state = state.copyWith(
       downloadedModelIds: downloadedIds,
-      activeModelId: activeModelId,
+      activeModelId: null, // Wait for load
       downloadProgress: downloadProgress,
-      downloadErrors: downloadErrors, // Reset errors on reload
+      downloadErrors: downloadErrors, 
       totalStorageUsed: totalStorage,
     );
+
+    // If we have a candidate, try to load it
+    if (activeModelIdCandidate != null) {
+       print('Initialization: Loading active model $activeModelIdCandidate');
+       try {
+         final modelPath = await modelManager.getModelPath(activeModelIdCandidate);
+         final llmService = _ref.read(llmServiceProvider);
+         
+         // Helper to show loading state if needed? 
+         // For now, UI will just show "No model selected" until this finishes.
+         
+         await llmService.loadModel(modelPath);
+         
+         // Success! Now update state.
+         state = state.copyWith(activeModelId: activeModelIdCandidate);
+         print('Initialization: Model $activeModelIdCandidate loaded and active.');
+         
+       } catch (e) {
+         print('Initialization Error: Failed to load active model: $e');
+         
+         // Notify user of failure via error map?
+         final newErrors = Map<String, String?>.from(state.downloadErrors);
+         newErrors[activeModelIdCandidate] = "Failed to load on startup: $e";
+         state = state.copyWith(downloadErrors: newErrors);
+       }
+    }
   }
 
   Future<void> downloadModel(String modelId) async {

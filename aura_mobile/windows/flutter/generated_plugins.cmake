@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
+  disk_space_2
   flutter_tts
   permission_handler_windows
   share_plus

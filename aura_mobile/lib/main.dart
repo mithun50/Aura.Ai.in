@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aura_mobile/presentation/pages/chat_screen.dart';
-import 'package:aura_mobile/presentation/pages/model_download_screen.dart';
+import 'package:aura_mobile/presentation/screens/onboarding_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aura_mobile/core/services/notification_service.dart';
 import 'package:aura_mobile/core/services/app_usage_tracker.dart';
 import 'package:aura_mobile/core/services/daily_summary_scheduler.dart';
@@ -39,15 +40,20 @@ void main() async {
   // Initialize daily summary scheduler
   await DailySummaryScheduler.initialize();
   
+  // Check Onboarding Status
+  final prefs = await SharedPreferences.getInstance();
+  final isOnboarded = prefs.getBool('is_onboarded') ?? false;
+  
   runApp(
-    const ProviderScope(
-      child: AuraApp(),
+    ProviderScope(
+      child: AuraApp(initialRoute: isOnboarded ? '/chat' : '/onboarding'),
     ),
   );
 }
 
 class AuraApp extends StatelessWidget {
-  const AuraApp({super.key});
+  final String initialRoute;
+  const AuraApp({super.key, required this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
@@ -62,8 +68,9 @@ class AuraApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const ModelDownloadScreen(),
+      initialRoute: initialRoute,
       routes: {
+        '/onboarding': (context) => const OnboardingScreen(),
         '/chat': (context) => const ChatScreen(),
       },
     );

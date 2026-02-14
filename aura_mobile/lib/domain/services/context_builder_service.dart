@@ -23,19 +23,17 @@ class ContextBuilderService {
     final buffer = StringBuffer();
 
     // 1. System Instruction
-    buffer.writeln("SYSTEM INSTRUCTION:");
-    buffer.writeln("You are AURA, a private offline AI assistant. Keep answers concise.");
-    buffer.writeln("");
-
+    buffer.writeln("You are AURA, a privacy-first offline AI assistant. Answer concisely and helpfully.");
+    
     // 2. Memory Context
     if (includeMemories) {
       final memories = await _memoryService.retrieveRelevantMemories(userMessage);
       if (memories.isNotEmpty) {
-        buffer.writeln("MEMORY CONTEXT:");
-        for (var mem in memories) {
+        final topMemories = memories.take(3).toList();
+        buffer.writeln("\nRelevant Memories:");
+        for (var mem in topMemories) {
           buffer.writeln("- $mem");
         }
-        buffer.writeln("");
       }
     }
 
@@ -43,26 +41,30 @@ class ContextBuilderService {
     if (includeDocuments) {
       final docContext = await _documentService.retrieveRelevantContext(userMessage);
       if (docContext.isNotEmpty) {
-        buffer.writeln("DOCUMENT CONTEXT:");
-        for (var chunk in docContext) {
+        final topDocs = docContext.take(2).toList(); // Reduce to 2 for speed/context window
+        buffer.writeln("\nDocument Context:");
+        for (var chunk in topDocs) {
           buffer.writeln(chunk);
         }
-        buffer.writeln("");
       }
     }
 
-    // 4. Chat History (limit to last 3 messages for performance)
+    // 4. Chat History
+    // Note: In ChatML, history should ideally be passed as separate messages, but for now we'll embed it in system 
+    // or just rely on the fact that we are only passing the 'systemPrompt' to RunAnywhere which puts it in <|im_start|>system.
+    // Putting chat history in system prompt is suboptimal but works for simple context state.
     if (chatHistory.isNotEmpty) {
-      final limitedHistory = chatHistory.length > 3 
-          ? chatHistory.sublist(chatHistory.length - 3) 
+      final limitedHistory = chatHistory.length > 5 
+          ? chatHistory.sublist(chatHistory.length - 5) 
           : chatHistory;
       
-      buffer.writeln("CHAT HISTORY:");
+      buffer.writeln("\nPrevious Conversation:");
       for (var msg in limitedHistory) {
         buffer.writeln(msg);
       }
-      buffer.writeln("");
     }
+    
+    // We do NOT add the user message here. RunAnywhere adds it as <|im_start|>user
     
     return buffer.toString();
   }
