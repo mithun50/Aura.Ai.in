@@ -61,7 +61,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final isModelLoading = chatState.isModelLoading || modelState.activeModelId == null;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0a0a0c), // Obsidian
+      backgroundColor: const Color(0xFF0a0a0c), // Obsidian - Keep opaque for normal app use
       drawer: const AppDrawer(), // Sidebar Implementation
       extendBodyBehindAppBar: true, // Transparent AppBar effect
       appBar: AppBar(

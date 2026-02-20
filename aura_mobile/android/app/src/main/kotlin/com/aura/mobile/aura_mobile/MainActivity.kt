@@ -2,17 +2,71 @@ package com.aura.mobile.aura_mobile
 
 import android.app.ActivityManager
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.BroadcastReceiver
 import android.telephony.SmsManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.EventChannel
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.aura.ai/memory"
     private val APP_CONTROL_CHANNEL = "com.aura.ai/app_control"
+    private val ASSISTANT_STATE_CHANNEL = "com.aura.ai/assistant_state"
+
+    private var assistantStateSink: EventChannel.EventSink? = null
+
+    private val assistantStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val state = intent?.getStringExtra("state")
+            if (state != null) {
+                assistantStateSink?.success(state)
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // Event Channel for Assistant State
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, ASSISTANT_STATE_CHANNEL).setStreamHandler(
+            object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    assistantStateSink = events
+                    val filter = IntentFilter("com.aura.mobile.assistant.STATE_CHANGE")
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        registerReceiver(assistantStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                    } else {
+                        registerReceiver(assistantStateReceiver, filter)
+                    }
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    assistantStateSink = null
+                    try {
+                        unregisterReceiver(assistantStateReceiver)
+                    } catch (e: Exception) {
+                        // Receiver might not be registered
+                    }
+                }
+            }
+        )
         
         // Memory Channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
@@ -84,8 +138,59 @@ class MainActivity: FlutterActivity() {
                         result.error("INVALID", "State required", null)
                     }
                 }
+                "startAssistant" -> {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this@MainActivity)) {
+                        val intent = android.content.Intent(
+                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            android.net.Uri.parse("package:$packageName")
+                        )
+                        startActivityForResult(intent, 1234)
+                        result.error("NEEDS_OVERLAY_PERMISSION", "Please grant Display Over Other Apps permission.", null)
+                    } else {
+                        val serviceIntent = android.content.Intent(this@MainActivity, com.aura.mobile.aura_mobile.assistant.AssistantForegroundService::class.java)
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            startForegroundService(serviceIntent)
+                        } else {
+                            startService(serviceIntent)
+                        }
+                        result.success("Assistant Started")
+                    }
+                }
+                "stopAssistant" -> {
+                    val serviceIntent = android.content.Intent(this@MainActivity, com.aura.mobile.aura_mobile.assistant.AssistantForegroundService::class.java)
+                    stopService(serviceIntent)
+                    result.success("Assistant Stopped")
+                }
+                "requestOverlayPermission" -> {
+                    requestOverlayPermission(result)
+                }
+                "setGestureMode" -> {
+                    val mode = call.argument<String>("mode") ?: "both"
+                    // Pass gesture mode to the running service via broadcast
+                    val intent = android.content.Intent("com.aura.mobile.assistant.SET_GESTURE_MODE")
+                    intent.putExtra("mode", mode)
+                    sendBroadcast(intent)
+                    result.success("Gesture mode set to $mode")
+                }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    private fun requestOverlayPermission(result: MethodChannel.Result) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            if (!android.provider.Settings.canDrawOverlays(this)) {
+                val intent = android.content.Intent(
+                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    android.net.Uri.parse("package:$packageName")
+                )
+                startActivityForResult(intent, 1234)
+                result.success("Requested Settings")
+            } else {
+                result.success("Already Granted")
+            }
+        } else {
+            result.success("Not required below M")
         }
     }
 

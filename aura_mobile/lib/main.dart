@@ -12,6 +12,7 @@ import 'package:aura_mobile/core/services/daily_summary_scheduler.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:aura_mobile/ai/run_anywhere_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:aura_mobile/presentation/widgets/voice_assistant_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -100,13 +101,13 @@ class AuraApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0a0a0c), // Obsidian
+        scaffoldBackgroundColor: Colors.transparent, // Changed to transparent for overlay
         primaryColor: const Color(0xFFc69c3a), // Gold
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFFc69c3a),
           secondary: Color(0xFFe6cf8e),
           surface: Color(0xFF1a1a20),
-          background: Color(0xFF0a0a0c),
+          background: Colors.transparent,
         ),
         textTheme: GoogleFonts.outfitTextTheme(
           Theme.of(context).textTheme.apply(
@@ -116,6 +117,14 @@ class AuraApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.ltr,
+          child: VoiceAssistantOverlay(
+            child: child ?? const SizedBox(),
+          ),
+        );
+      },
       initialRoute: initialRoute,
       routes: {
         '/onboarding': (context) => const OnboardingScreen(),

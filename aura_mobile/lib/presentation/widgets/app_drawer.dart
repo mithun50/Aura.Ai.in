@@ -4,7 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:aura_mobile/presentation/providers/user_provider.dart';
 import 'package:aura_mobile/presentation/providers/chat_provider.dart';
 import 'package:aura_mobile/presentation/providers/chat_history_provider.dart'; // New Import
+import 'package:aura_mobile/core/services/voice_assistant_service.dart';
 import 'package:aura_mobile/presentation/pages/model_selector_screen.dart';
+import 'package:aura_mobile/presentation/pages/voice_assistant_settings_page.dart';
 import 'package:intl/intl.dart'; // For date formatting
 import 'package:aura_mobile/core/providers/repository_providers.dart';
 
@@ -142,7 +144,32 @@ class AppDrawer extends ConsumerWidget {
 
             const Divider(color: Colors.white10),
 
-            // 4. Footer (Model Selector & Settings)
+            // 4. Voice Assistant Toggle
+            StatefulBuilder(
+              builder: (context, setState) {
+                return SwitchListTile(
+                  secondary: const Icon(Icons.record_voice_over, color: Color(0xFFc69c3a)),
+                  title: Text("Voice Assistant", style: GoogleFonts.outfit(color: Colors.white)),
+                  subtitle: Text(
+                      VoiceAssistantService.isRunning ? "Active" : "Inactive — tap to enable",
+                      style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12)),
+                  value: VoiceAssistantService.isRunning,
+                  activeColor: const Color(0xFFc69c3a),
+                  onChanged: (bool value) async {
+                    if (value) {
+                      await VoiceAssistantService.startAssistant();
+                    } else {
+                      await VoiceAssistantService.stopAssistant();
+                    }
+                    setState(() {});
+                  },
+                );
+              }
+            ),
+
+            const Divider(color: Colors.white10),
+
+            // 5. Footer (Model Selector & Settings)
             ListTile(
               leading: const Icon(Icons.psychology, color: Color(0xFFc69c3a)), // Gold Icon
               title: Text("Switch Model", style: GoogleFonts.outfit(color: const Color(0xFFc69c3a))),
@@ -158,9 +185,17 @@ class AppDrawer extends ConsumerWidget {
             ListTile(
               leading: const Icon(Icons.settings, color: Colors.white70),
               title: Text("Settings", style: GoogleFonts.outfit(color: Colors.white)),
+              subtitle: Text("Permissions & Gestures",
+                  style: GoogleFonts.outfit(color: Colors.white38, fontSize: 12)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
               onTap: () {
-                // TODO: Settings
                 Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const VoiceAssistantSettingsPage(),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 16),
