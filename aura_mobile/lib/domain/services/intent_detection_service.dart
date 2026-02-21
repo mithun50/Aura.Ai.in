@@ -27,19 +27,26 @@ class IntentDetectionService {
 
     // 0️⃣ Torch / Flashlight (High Priority)
     final torchRegex = RegExp(
-      r'\b(torch|flashlight|flash|light)\b',
+      r'\b(torch|flashlight|flash\s*light)\b',
       caseSensitive: false,
     );
     if (torchRegex.hasMatch(lowerMessage)) {
-       // Check for clear toggle commands or just the noun
-       if (lowerMessage.contains("on") || 
-           lowerMessage.contains("off") || 
-           lowerMessage.contains("enable") || 
-           lowerMessage.contains("disable") || 
-           lowerMessage.startsWith("torch") || 
+       if (lowerMessage.contains("on") ||
+           lowerMessage.contains("off") ||
+           lowerMessage.contains("enable") ||
+           lowerMessage.contains("disable") ||
+           lowerMessage.startsWith("torch") ||
            lowerMessage.startsWith("flashlight")) {
            return IntentType.torchControl;
        }
+    }
+    // "turn the light on/off", "light up my phone", "lights on/off"
+    final torchNaturalRegex = RegExp(
+      r'(turn\s+the\s+light\s+(on|off)|light\s+up\s+my\s+phone|lights?\s+(on|off))',
+      caseSensitive: false,
+    );
+    if (torchNaturalRegex.hasMatch(lowerMessage)) {
+      return IntentType.torchControl;
     }
 
     // 1️⃣ Memory Store
@@ -70,9 +77,9 @@ class IntentDetectionService {
 
     // 3️⃣ App Control / Device Actions
     
-    // Open/Launch
+    // Open/Launch (expanded with natural variations)
     final openAppRegex = RegExp(
-      r'^(open|launch|start|run|go\s+to|switch\s+to)\s+(.+)',
+      r'^(open|launch|start|run|go\s+to|switch\s+to|fire\s+up|pull\s+up|bring\s+up|load)\s+(.+)',
       caseSensitive: false,
     );
     
@@ -92,53 +99,81 @@ class IntentDetectionService {
       return IntentType.closeApp;
     }
 
-    // Settings
+    // Settings (expanded: "take me to X settings", "bring up wifi/bluetooth")
     final settingsRegex = RegExp(
       r'\b(settings|configuration|preferences|config)\b',
       caseSensitive: false,
     );
-    
-    if (settingsRegex.hasMatch(lowerMessage) && 
-       (lowerMessage.contains("open") || lowerMessage.contains("show") || lowerMessage.contains("manage") || lowerMessage.contains("change") || lowerMessage.contains("wifi") || lowerMessage.contains("bluetooth"))) {
+
+    if (settingsRegex.hasMatch(lowerMessage) &&
+       (lowerMessage.contains("open") || lowerMessage.contains("show") || lowerMessage.contains("manage") || lowerMessage.contains("change") || lowerMessage.contains("take me") || lowerMessage.contains("bring up") || lowerMessage.contains("wifi") || lowerMessage.contains("bluetooth"))) {
+      return IntentType.openSettings;
+    }
+    // "take me to wifi/bluetooth settings", "bring up wifi/bluetooth"
+    final settingsNaturalRegex = RegExp(
+      r'(take\s+me\s+to\s+.*(settings|wifi|bluetooth)|bring\s+up\s+(wifi|bluetooth))',
+      caseSensitive: false,
+    );
+    if (settingsNaturalRegex.hasMatch(lowerMessage)) {
       return IntentType.openSettings;
     }
 
-    // Camera
+    // Camera (expanded: standalone "snap/shoot/capture a photo/pic/selfie")
     final cameraRegex = RegExp(
-      r'\b(camera|photo|picture|selfie|video)\b',
+      r'\b(camera|photo|picture|selfie|pic)\b',
       caseSensitive: false,
     );
-    
-    if (cameraRegex.hasMatch(lowerMessage) && 
-       (lowerMessage.contains("open") || lowerMessage.contains("start") || lowerMessage.contains("take") || lowerMessage.contains("capture") || lowerMessage.contains("snap"))) {
+
+    if (cameraRegex.hasMatch(lowerMessage) &&
+       (lowerMessage.contains("open") || lowerMessage.contains("start") || lowerMessage.contains("take") || lowerMessage.contains("capture") || lowerMessage.contains("snap") || lowerMessage.contains("shoot"))) {
+      return IntentType.openCamera;
+    }
+    // Standalone camera commands: "snap a photo", "shoot a picture", "take a snap", "capture a selfie"
+    final cameraNaturalRegex = RegExp(
+      r'\b(snap|shoot|capture|take)\s+(a\s+)?(photo|picture|pic|selfie|snap)\b',
+      caseSensitive: false,
+    );
+    if (cameraNaturalRegex.hasMatch(lowerMessage)) {
       return IntentType.openCamera;
     }
 
-    // Calls
+    // Calls (expanded: "ring up", "buzz", "give X a call/ring")
     final callRegex = RegExp(
-      r'^(call|dial|phone|ring|contact)\s+(.+)',
+      r'^(call|dial|phone|ring\s+up|ring|buzz|contact)\s+(.+)',
       caseSensitive: false,
     );
     if (callRegex.hasMatch(lowerMessage)) {
       return IntentType.dialContact;
     }
+    // "give X a call/ring" pattern
+    final callNaturalRegex = RegExp(
+      r'give\s+(.+?)\s+a\s+(call|ring|buzz)',
+      caseSensitive: false,
+    );
+    if (callNaturalRegex.hasMatch(lowerMessage)) {
+      return IntentType.dialContact;
+    }
 
-    // SMS
+    // SMS (expanded: "drop a text/line/message to X", "shoot a message to")
     final smsRegex = RegExp(
       r'^(send|write|shoot|text|message|msg)\s+.*(sms|text|message|msg)?',
       caseSensitive: false,
     );
     if (smsRegex.hasMatch(lowerMessage) && !lowerMessage.startsWith("remember") && !lowerMessage.startsWith("save")) {
-       // Avoid conflict with memory store "save this message"
-       // But wait, "message" is generic. Ideally we check if it looks like a person's name or structure.
-       // Let's rely on the extraction logic to fail gracefully if it matches nothing,
-       // or be more specific: "text [Name]"
-       if (lowerMessage.startsWith("text") || 
-           lowerMessage.startsWith("message") || 
-           lowerMessage.contains(" sms ") || 
+       if (lowerMessage.startsWith("text") ||
+           lowerMessage.startsWith("message") ||
+           lowerMessage.contains(" sms ") ||
            lowerMessage.endsWith(" sms")) {
           return IntentType.sendSMS;
        }
+    }
+    // "drop a text/line/message to X", "shoot a message to X"
+    final smsNaturalRegex = RegExp(
+      r'(drop\s+a\s+(text|line|message)\s+to\s+|shoot\s+a\s+(message|text)\s+to\s+)',
+      caseSensitive: false,
+    );
+    if (smsNaturalRegex.hasMatch(lowerMessage)) {
+      return IntentType.sendSMS;
     }
 
     // 4️⃣ Web Search (Explicit Commands & Keywords)
@@ -226,10 +261,10 @@ class IntentDetectionService {
   String extractAppName(String message) {
     final clean = message.trim();
     final commandRegex = RegExp(
-      r'^(open|launch|start|run|go\s+to|switch\s+to|close|kill|stop|exit|quit|shut\s+down)\s+',
+      r'^(open|launch|start|run|go\s+to|switch\s+to|fire\s+up|pull\s+up|bring\s+up|load|close|kill|stop|exit|quit|shut\s+down)\s+',
       caseSensitive: false,
     );
-    
+
     final match = commandRegex.firstMatch(clean);
     if (match != null) {
       return clean.substring(match.end).trim();
@@ -239,18 +274,32 @@ class IntentDetectionService {
 
   String extractSettingsType(String message) {
     final lower = message.toLowerCase();
-    if (lower.contains("wifi")) return "wifi";
+    if (lower.contains("wifi") || lower.contains("wi-fi")) return "wifi";
     if (lower.contains("bluetooth")) return "bluetooth";
+    if (lower.contains("display") || lower.contains("brightness")) return "display";
+    if (lower.contains("sound") || lower.contains("volume")) return "sound";
     return "general";
   }
 
   String extractContactName(String message) {
     String clean = message.trim();
-    final commandRegex = RegExp(
-      r'^(call|dial|phone|ring|contact)\s+',
+
+    // "give X a call/ring/buzz" pattern
+    final giveCallRegex = RegExp(
+      r'give\s+(.+?)\s+a\s+(call|ring|buzz)',
       caseSensitive: false,
     );
-    
+    final giveMatch = giveCallRegex.firstMatch(clean);
+    if (giveMatch != null) {
+      return giveMatch.group(1)?.trim() ?? clean;
+    }
+
+    // Standard prefixes: call, dial, phone, ring up, ring, buzz, contact
+    final commandRegex = RegExp(
+      r'^(call|dial|phone|ring\s+up|ring|buzz|contact)\s+',
+      caseSensitive: false,
+    );
+
     final match = commandRegex.firstMatch(clean);
     if (match != null) {
       return clean.substring(match.end).trim();
@@ -285,14 +334,15 @@ class IntentDetectionService {
         // e.g., "Send message to John saying Hello"
         if (potentialBody.toLowerCase().replaceAll(RegExp(r'^(a\s+)?(sms|text|message|msg)$'), '').trim().isEmpty) {
              // It was just "Send message to..."
-             // Check for "saying"
-             if (lower.contains(" saying ")) {
-                final sayingIndex = lower.indexOf(" saying ");
-                if (sayingIndex > toIndex) {
-                   name = clean.substring(toIndex + 4, sayingIndex).trim();
-                   body = clean.substring(sayingIndex + 8).trim();
-                   return {'name': name, 'message': body};
-                }
+             // Check for "saying" or "as" separator
+             final separatorRegex = RegExp(r'\s+(saying|as)\s+', caseSensitive: false);
+             final sepMatch = separatorRegex.firstMatch(clean.substring(toIndex + 4));
+             if (sepMatch != null) {
+                final sepStart = toIndex + 4 + sepMatch.start;
+                final sepEnd = toIndex + 4 + sepMatch.end;
+                name = clean.substring(toIndex + 4, sepStart).trim();
+                body = clean.substring(sepEnd).trim();
+                return {'name': name, 'message': body};
              }
              // "Send message to John: Hello"
              if (afterTo.contains(":")) {
@@ -313,6 +363,25 @@ class IntentDetectionService {
            return {'name': name, 'message': body};
         }
       }
+    }
+
+    // Pattern 1b: "drop a text/line/message to [Name]" or "shoot a message to [Name]"
+    final dropRegex = RegExp(
+      r'(drop\s+a\s+(text|line|message)|shoot\s+a\s+(message|text))\s+to\s+(.+)',
+      caseSensitive: false,
+    );
+    final dropMatch = dropRegex.firstMatch(clean);
+    if (dropMatch != null) {
+      final afterTo = dropMatch.group(4)?.trim() ?? '';
+      final sepRegex = RegExp(r'\s+(saying|as)\s+', caseSensitive: false);
+      final sepMatch = sepRegex.firstMatch(afterTo);
+      if (sepMatch != null) {
+        name = afterTo.substring(0, sepMatch.start).trim();
+        body = afterTo.substring(sepMatch.end).trim();
+      } else {
+        name = afterTo;
+      }
+      return {'name': name, 'message': body};
     }
 
     // Pattern 2: "Text [Name] [Message]" (Standard)
@@ -338,6 +407,10 @@ class IntentDetectionService {
            if (nameIndex != -1) {
               body = remaining.substring(nameIndex + name.length).trim();
            }
+           // Strip "as" or "saying" separator from body start
+           // e.g. "text appu as hai" → body was "as hai", now "hai"
+           final bodySepRegex = RegExp(r'^(as|saying)\s+', caseSensitive: false);
+           body = body.replaceFirst(bodySepRegex, '');
         } 
         // Case B: Starts with Number (No letters)
         else {

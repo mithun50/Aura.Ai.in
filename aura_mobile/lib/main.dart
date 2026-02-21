@@ -13,6 +13,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:aura_mobile/ai/run_anywhere_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:aura_mobile/presentation/widgets/voice_assistant_overlay.dart';
+import 'package:aura_mobile/core/services/assistant_ai_bridge.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -90,12 +91,15 @@ Future<void> _initServicesAsync() async {
   }
 }
 
-class AuraApp extends StatelessWidget {
+class AuraApp extends ConsumerWidget {
   final String initialRoute;
   const AuraApp({super.key, required this.initialRoute});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Eagerly initialize the AI bridge so it registers the MethodChannel handler
+    ref.read(assistantAiBridgeProvider);
+
     return MaterialApp(
       title: 'AURA Mobile',
       debugShowCheckedModeBanner: false,

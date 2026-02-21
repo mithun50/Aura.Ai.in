@@ -186,18 +186,21 @@ class ChatNotifier extends StateNotifier<ChatState> {
             .map((m) => "${m['role'] == 'user' ? 'User' : 'Assistant'}: ${m['content']}")
             .toList();
             
-      // Limit history to last 10 messages to avoid context overflow, 
-      // but Orchestrator handles specific pruning too.
-      final history = allHistory.length > 5 
-          ? allHistory.sublist(allHistory.length - 5) 
+      // Limit history to last 3 messages to match context_builder_service pruning
+      final history = allHistory.length > 3
+          ? allHistory.sublist(allHistory.length - 3)
           : allHistory;
+
+      // Check if documents are available
+      final documentService = _ref.read(documentServiceProvider);
+      final hasDocuments = await documentService.hasDocuments();
 
       // Delegate to Orchestrator
       print("ChatNotifier: Delegating message to Orchestrator");
       final stream = orchestrator.processMessage(
-        message: text, 
+        message: text,
         chatHistory: history,
-        hasDocuments: true // Assuming active for now
+        hasDocuments: hasDocuments,
       );
 
       String fullResponse = '';

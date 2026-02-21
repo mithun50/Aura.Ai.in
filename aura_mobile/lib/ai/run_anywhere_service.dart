@@ -42,6 +42,9 @@ class RunAnywhere {
   double? _contextId;
   String? _currentModelPath;
 
+  /// Whether a model is currently loaded and ready for inference.
+  bool get isModelLoaded => _contextId != null;
+
   final _downloadStreamController =
       StreamController<DownloadUpdate>.broadcast();
   Stream<DownloadUpdate> get downloadUpdates =>
@@ -258,7 +261,7 @@ class RunAnywhere {
   Stream<String> chat({
     required String prompt,
     String? systemPrompt,
-    int maxTokens = 256,
+    int maxTokens = 512,
   }) {
     if (!_isInitialized) throw Exception('RunAnywhere not initialized');
     if (_contextId == null) throw Exception('No model loaded');

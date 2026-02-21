@@ -109,6 +109,11 @@ class DocumentService {
     return chunks;
   }
 
+  Future<bool> hasDocuments() async {
+    final docs = await _repository.getAllChunks();
+    return docs.isNotEmpty;
+  }
+
   Future<List<String>> retrieveRelevantContext(String query, {int limit = 5}) async {
     final queryEmbedding = await _aiService.getEmbeddings(query);
     final allChunks = await _repository.getAllChunks(); // Note: Inefficient for large scale, fix later

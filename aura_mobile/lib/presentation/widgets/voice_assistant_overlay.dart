@@ -101,7 +101,11 @@ class _VoiceAssistantOverlayState extends State<VoiceAssistantOverlay> with Sing
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _assistantState == "LISTENING" ? "Hi there, I'm listening..." : "Thinking about that...",
+                      _assistantState == "LISTENING"
+                          ? "Hi there, I'm listening..."
+                          : _assistantState == "SPEAKING"
+                              ? "Here's what I found..."
+                              : "Thinking about that...",
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 24,

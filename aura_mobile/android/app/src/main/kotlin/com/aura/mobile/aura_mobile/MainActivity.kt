@@ -15,8 +15,10 @@ class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.aura.ai/memory"
     private val APP_CONTROL_CHANNEL = "com.aura.ai/app_control"
     private val ASSISTANT_STATE_CHANNEL = "com.aura.ai/assistant_state"
+    private val ASSISTANT_AI_CHANNEL = "com.aura.ai/assistant_ai"
 
     private var assistantStateSink: EventChannel.EventSink? = null
+    private var assistantAiChannel: MethodChannel? = null
 
     private val assistantStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -24,6 +26,14 @@ class MainActivity: FlutterActivity() {
             if (state != null) {
                 assistantStateSink?.success(state)
             }
+        }
+    }
+
+    // Receives AI_REQUEST from AssistantForegroundService, forwards to Flutter
+    private val aiRequestReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val query = intent?.getStringExtra("query") ?: return
+            assistantAiChannel?.invokeMethod("processAIQuery", query)
         }
     }
 
@@ -68,6 +78,29 @@ class MainActivity: FlutterActivity() {
             }
         )
         
+        // Assistant AI Channel — bridges native voice assistant to Flutter AI pipeline
+        assistantAiChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ASSISTANT_AI_CHANNEL)
+        assistantAiChannel!!.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "sendAIResponse" -> {
+                    val response = call.arguments as? String ?: ""
+                    val responseIntent = Intent("com.aura.mobile.assistant.AI_RESPONSE")
+                    responseIntent.putExtra("response", response)
+                    sendBroadcast(responseIntent)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Register receiver for AI requests from the foreground service
+        val aiRequestFilter = IntentFilter("com.aura.mobile.assistant.AI_REQUEST")
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(aiRequestReceiver, aiRequestFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(aiRequestReceiver, aiRequestFilter)
+        }
+
         // Memory Channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             if (call.method == "getAvailableMemory") {
@@ -430,5 +463,10 @@ class MainActivity: FlutterActivity() {
         } catch (e: Exception) {
             result.error("TORCH_ERROR", e.message, null)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try { unregisterReceiver(aiRequestReceiver) } catch (_: Exception) { }
     }
 }

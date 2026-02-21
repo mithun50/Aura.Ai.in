@@ -22,6 +22,8 @@ class AssistantForegroundService : Service() {
         var currentState: String = "IDLE"
         const val ACTION_LISTEN_NOW = "com.aura.mobile.assistant.LISTEN_NOW"
         const val ACTION_CANCEL = "com.aura.mobile.assistant.CANCEL"
+        const val ACTION_AI_REQUEST = "com.aura.mobile.assistant.AI_REQUEST"
+        const val ACTION_AI_RESPONSE = "com.aura.mobile.assistant.AI_RESPONSE"
     }
 
     // Receives the notification action button tap and cancel actions
@@ -49,6 +51,29 @@ class AssistantForegroundService : Service() {
     private var isWaitingForContactSelection = false
     private var pendingCommand: ParsedCommand? = null
     private var pendingCallContacts: List<DeviceControlService.ContactMatch> = emptyList()
+
+    private var isWaitingForAI = false
+    private val aiTimeoutHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val aiTimeoutRunnable = Runnable {
+        if (isWaitingForAI) {
+            isWaitingForAI = false
+            ttsManager.speak("AI is taking too long. Please try again.")
+            broadcastState("IDLE")
+        }
+    }
+
+    // Receives AI_RESPONSE from MainActivity (which got it from Flutter)
+    private val aiResponseReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (!isWaitingForAI) return
+            isWaitingForAI = false
+            aiTimeoutHandler.removeCallbacks(aiTimeoutRunnable)
+            val response = intent?.getStringExtra("response") ?: "I couldn't get a response."
+            broadcastState("SPEAKING")
+            ttsManager.speak(response)
+            broadcastState("IDLE")
+        }
+    }
 
     // Gesture mode: "shake", "power", or "both" (default)
     private var gestureMode: String = "both"
@@ -119,6 +144,14 @@ class AssistantForegroundService : Service() {
         // Show the floating mic bubble (easy one-tap trigger)
         overlayManager.showFloatingBubble { triggerAssistant() }
 
+        // Listen for AI responses from Flutter via MainActivity
+        val aiResponseFilter = IntentFilter(ACTION_AI_RESPONSE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(aiResponseReceiver, aiResponseFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(aiResponseReceiver, aiResponseFilter)
+        }
+
         // Listen for notification action taps and cancel actions
         val actionFilter = IntentFilter().apply {
             addAction(ACTION_LISTEN_NOW)
@@ -133,7 +166,7 @@ class AssistantForegroundService : Service() {
 
     /** Shared trigger for both shake and power-button activation */
     private fun triggerAssistant() {
-        if (isWaitingForConfirmation || isWaitingForContactSelection || isWaitingForMessage) return
+        if (isWaitingForConfirmation || isWaitingForContactSelection || isWaitingForMessage || isWaitingForAI) return
         vibrate()
         broadcastState("LISTENING")
         overlayManager.showOverlay("LISTENING")
@@ -147,6 +180,8 @@ class AssistantForegroundService : Service() {
         isWaitingForConfirmation = false
         isWaitingForMessage = false
         isWaitingForContactSelection = false
+        isWaitingForAI = false
+        aiTimeoutHandler.removeCallbacks(aiTimeoutRunnable)
         pendingCommand = null
         broadcastState("IDLE")
     }
@@ -278,11 +313,30 @@ class AssistantForegroundService : Service() {
                     }
                 }
             }
+            is ParsedCommand.WebSearch -> {
+                requestAIProcessing("search for: ${command.query}")
+            }
+            is ParsedCommand.Unknown -> {
+                requestAIProcessing(text)
+            }
             else -> {
                 deviceControlService.executeCommand(command, ttsManager)
                 broadcastState("IDLE")
             }
         }
+    }
+
+    private fun requestAIProcessing(text: String) {
+        isWaitingForAI = true
+        broadcastState("PROCESSING")
+        ttsManager.speak("Let me think about that.")
+
+        val intent = Intent(ACTION_AI_REQUEST)
+        intent.putExtra("query", text)
+        sendBroadcast(intent)
+
+        // 30-second timeout in case Flutter engine is not running
+        aiTimeoutHandler.postDelayed(aiTimeoutRunnable, 30_000L)
     }
 
     private fun executePendingCommand() {
@@ -341,6 +395,8 @@ class AssistantForegroundService : Service() {
         try { unregisterReceiver(powerButtonDetector) } catch (e: Exception) { }
         try { unregisterReceiver(gestureModeReceiver) } catch (e: Exception) { }
         try { unregisterReceiver(actionReceiver) } catch (e: Exception) { }
+        try { unregisterReceiver(aiResponseReceiver) } catch (e: Exception) { }
+        aiTimeoutHandler.removeCallbacks(aiTimeoutRunnable)
     }
 
     override fun onBind(intent: Intent?): IBinder? {
