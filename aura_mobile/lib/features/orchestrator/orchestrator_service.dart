@@ -42,18 +42,23 @@ class OrchestratorService {
     this._llmClassifier,
   );
 
+  /// Process a message through intent detection and routing.
+  /// [isVoiceQuery] skips the LLM classifier to avoid double inference + timeout.
   Stream<String> processMessage({
     required String message,
     required List<String> chatHistory,
     bool hasDocuments = false,
+    bool isVoiceQuery = false,
   }) async* {
     // 1. Rule-based Intent Detection (Layer 1)
     var intent = await _intentService.detectIntent(message, hasDocuments: hasDocuments);
     debugPrint("ORCHESTRATOR: Rule-based intent -> $intent");
 
-    // 2. LLM Fallback Classification (Layer 2) — only when rule-based says normalChat
+    // 2. LLM Fallback Classification (Layer 2) — only for chat UI, not voice
+    // Voice queries already went through CommandParser; running classifier + chat
+    // would cause two LLM inferences and risk hitting the 30s voice timeout.
     ClassifiedIntent? classifiedIntent;
-    if (intent == IntentType.normalChat) {
+    if (intent == IntentType.normalChat && !isVoiceQuery) {
       classifiedIntent = await _llmClassifier.classify(message);
       if (classifiedIntent != null && classifiedIntent.type != IntentType.normalChat) {
         debugPrint("ORCHESTRATOR: LLM classified intent -> ${classifiedIntent.type} params=${classifiedIntent.params}");

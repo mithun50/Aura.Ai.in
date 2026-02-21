@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:aura_mobile/data/datasources/llm_service.dart';
+import 'package:aura_mobile/core/providers/ai_providers.dart';
 import 'package:aura_mobile/features/orchestrator/orchestrator_service.dart';
 
 final assistantAiBridgeProvider = Provider((ref) {
@@ -24,11 +27,23 @@ class AssistantAiBridge {
 
   Future<void> _processQuery(String query) async {
     try {
+      // Check if model is loaded before attempting AI processing
+      final llmService = _ref.read(llmServiceProvider);
+      if (!llmService.isModelLoaded) {
+        debugPrint('AI_BRIDGE: Model not loaded, sending fallback response');
+        await _channel.invokeMethod(
+          'sendAIResponse',
+          'The AI model is not loaded yet. Please open the app and download a model first.',
+        );
+        return;
+      }
+
       final orchestrator = _ref.read(orchestratorServiceProvider);
       final stream = orchestrator.processMessage(
         message: query,
         chatHistory: [],
         hasDocuments: false,
+        isVoiceQuery: true,
       );
 
       final buffer = StringBuffer();
@@ -46,6 +61,7 @@ class AssistantAiBridge {
 
       await _channel.invokeMethod('sendAIResponse', response);
     } catch (e) {
+      debugPrint('AI_BRIDGE: Error processing query: $e');
       await _channel.invokeMethod(
         'sendAIResponse',
         'Sorry, I encountered an error processing your request.',
