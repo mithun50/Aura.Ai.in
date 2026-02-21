@@ -92,6 +92,14 @@ class IntentDetectionService {
     if (openAppRegex.hasMatch(lowerMessage)) {
        if (lowerMessage.contains("settings")) return IntentType.openSettings;
        if (lowerMessage.contains("camera")) return IntentType.openCamera;
+       // Detect compound "open youtube and play/search X" — route to webSearch
+       final compoundYoutubeRegex = RegExp(
+         r'youtube\s+and\s+(play|search|search\s+for)\s+',
+         caseSensitive: false,
+       );
+       if (lowerMessage.contains("youtube") && compoundYoutubeRegex.hasMatch(lowerMessage)) {
+         return IntentType.webSearch;
+       }
        return IntentType.openApp;
     }
 

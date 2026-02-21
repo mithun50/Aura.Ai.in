@@ -80,6 +80,11 @@ class OverlayManager(private val context: Context) {
                     showOverlayPanel()
                     startSpinAnimation(orbView)
                 }
+                "SPEAKING" -> {
+                    statusText?.text = "Here's what I found..."
+                    showOverlayPanel()
+                    startPulseAnimation(orbView)
+                }
                 "IDLE" -> {
                     hideOverlay()
                 }

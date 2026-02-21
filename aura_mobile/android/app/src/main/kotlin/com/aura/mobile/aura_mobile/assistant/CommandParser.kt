@@ -57,7 +57,16 @@ object CommandParser {
         if (matchedOpenPrefix != null &&
             !text.contains("camera") && !text.contains("settings") && !text.contains("wifi") && !text.contains("bluetooth")) {
             val appName = text.removePrefix(matchedOpenPrefix).trim()
-            if (appName.isNotEmpty()) return ParsedCommand.OpenApp(appName)
+            if (appName.isNotEmpty()) {
+                // Check for compound "open youtube and play/search X" pattern
+                val compoundPlayRegex = Regex("^youtube\\s+and\\s+(play|search|search for)\\s+(.+)", RegexOption.IGNORE_CASE)
+                val compoundMatch = compoundPlayRegex.find(appName)
+                if (compoundMatch != null) {
+                    val query = compoundMatch.groupValues[2].trim()
+                    if (query.isNotEmpty()) return ParsedCommand.PlayYouTube(query)
+                }
+                return ParsedCommand.OpenApp(appName)
+            }
         }
 
         // Call Contact (expanded: ring up, phone, buzz, give X a call/ring)

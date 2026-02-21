@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aura_mobile/data/datasources/llm_service.dart';
 import 'package:aura_mobile/core/providers/ai_providers.dart';
 import 'package:aura_mobile/features/orchestrator/orchestrator_service.dart';
@@ -27,15 +28,24 @@ class AssistantAiBridge {
 
   Future<void> _processQuery(String query) async {
     try {
-      // Check if model is loaded before attempting AI processing
       final llmService = _ref.read(llmServiceProvider);
+
+      // Auto-load model if not loaded yet
       if (!llmService.isModelLoaded) {
-        debugPrint('AI_BRIDGE: Model not loaded, sending fallback response');
-        await _channel.invokeMethod(
-          'sendAIResponse',
-          'The AI model is not loaded yet. Please open the app and download a model first.',
-        );
-        return;
+        debugPrint('AI_BRIDGE: Model not loaded, attempting auto-load...');
+        final prefs = await SharedPreferences.getInstance();
+        final modelPath = prefs.getString('selected_model_path');
+        if (modelPath != null && modelPath.isNotEmpty) {
+          await llmService.initialize();
+          await llmService.loadModel(modelPath);
+          debugPrint('AI_BRIDGE: Model auto-loaded from $modelPath');
+        } else {
+          debugPrint('AI_BRIDGE: No model path found, sending fallback');
+          await _channel.invokeMethod('sendAIChunk',
+            'The AI model is not loaded yet. Please open the app and download a model first.');
+          await _channel.invokeMethod('sendAIComplete', null);
+          return;
+        }
       }
 
       final orchestrator = _ref.read(orchestratorServiceProvider);
@@ -46,27 +56,64 @@ class AssistantAiBridge {
         isVoiceQuery: true,
       );
 
-      final buffer = StringBuffer();
+      String pendingText = '';
+
       await for (final chunk in stream) {
-        buffer.write(chunk);
+        pendingText += chunk;
+
+        // Extract complete sentences and send them as chunks
+        final extracted = _extractCompleteSentences(pendingText);
+        if (extracted.sentences.isNotEmpty) {
+          final cleaned = _stripMarkdown(extracted.sentences);
+          if (cleaned.trim().isNotEmpty) {
+            await _channel.invokeMethod('sendAIChunk', cleaned);
+          }
+          pendingText = extracted.remainder;
+        }
       }
 
-      String response = buffer.toString().trim();
-      if (response.isEmpty) {
-        response = "I couldn't generate a response right now.";
+      // Send any remaining text
+      if (pendingText.trim().isNotEmpty) {
+        final cleaned = _stripMarkdown(pendingText.trim());
+        if (cleaned.trim().isNotEmpty) {
+          await _channel.invokeMethod('sendAIChunk', cleaned);
+        }
       }
 
-      // Strip markdown for TTS readability
-      response = _stripMarkdown(response);
-
-      await _channel.invokeMethod('sendAIResponse', response);
+      await _channel.invokeMethod('sendAIComplete', null);
     } catch (e) {
       debugPrint('AI_BRIDGE: Error processing query: $e');
-      await _channel.invokeMethod(
-        'sendAIResponse',
-        'Sorry, I encountered an error processing your request.',
+      await _channel.invokeMethod('sendAIChunk',
+        'Sorry, I encountered an error processing your request.');
+      await _channel.invokeMethod('sendAIComplete', null);
+    }
+  }
+
+  /// Extracts complete sentences from accumulated text.
+  /// Returns the sentences and the leftover remainder.
+  _SentenceExtraction _extractCompleteSentences(String text) {
+    // Find the last sentence boundary (. ! ? or newline followed by space/newline/end)
+    int lastBoundary = -1;
+    for (int i = 0; i < text.length - 1; i++) {
+      final c = text[i];
+      if (c == '.' || c == '!' || c == '?') {
+        final next = text[i + 1];
+        if (next == ' ' || next == '\n' || next == '\r') {
+          lastBoundary = i + 1;
+        }
+      } else if (c == '\n') {
+        lastBoundary = i + 1;
+      }
+    }
+
+    if (lastBoundary > 0) {
+      return _SentenceExtraction(
+        sentences: text.substring(0, lastBoundary).trim(),
+        remainder: text.substring(lastBoundary),
       );
     }
+
+    return _SentenceExtraction(sentences: '', remainder: text);
   }
 
   String _stripMarkdown(String text) {
@@ -86,4 +133,10 @@ class AssistantAiBridge {
         .replaceAll(RegExp(r'\n{3,}'), '\n\n') // excess newlines
         .trim();
   }
+}
+
+class _SentenceExtraction {
+  final String sentences;
+  final String remainder;
+  _SentenceExtraction({required this.sentences, required this.remainder});
 }

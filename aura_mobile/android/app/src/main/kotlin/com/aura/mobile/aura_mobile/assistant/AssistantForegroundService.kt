@@ -22,8 +22,19 @@ class AssistantForegroundService : Service() {
         var currentState: String = "IDLE"
         const val ACTION_LISTEN_NOW = "com.aura.mobile.assistant.LISTEN_NOW"
         const val ACTION_CANCEL = "com.aura.mobile.assistant.CANCEL"
-        const val ACTION_AI_REQUEST = "com.aura.mobile.assistant.AI_REQUEST"
-        const val ACTION_AI_RESPONSE = "com.aura.mobile.assistant.AI_RESPONSE"
+        const val AI_TIMEOUT_MS = 90_000L
+
+        /** Set by MainActivity when Flutter engine is alive — direct call instead of broadcast. */
+        var aiRequestHandler: ((query: String) -> Unit)? = null
+
+        /** Set by the service in onCreate — called by MainActivity for each streaming chunk. */
+        var onAiChunk: ((chunk: String) -> Unit)? = null
+
+        /** Set by the service in onCreate — called by MainActivity when AI generation is complete. */
+        var onAiComplete: (() -> Unit)? = null
+
+        /** Stores an AI query when Flutter is dead; MainActivity picks it up on launch. */
+        var pendingAiQuery: String? = null
     }
 
     // Receives the notification action button tap and cancel actions
@@ -62,19 +73,6 @@ class AssistantForegroundService : Service() {
         }
     }
 
-    // Receives AI_RESPONSE from MainActivity (which got it from Flutter)
-    private val aiResponseReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context?, intent: Intent?) {
-            if (!isWaitingForAI) return
-            isWaitingForAI = false
-            aiTimeoutHandler.removeCallbacks(aiTimeoutRunnable)
-            val response = intent?.getStringExtra("response") ?: "I couldn't get a response."
-            broadcastState("SPEAKING")
-            ttsManager.speak(response)
-            broadcastState("IDLE")
-        }
-    }
-
     // Gesture mode: "shake", "power", or "both" (default)
     private var gestureMode: String = "both"
     private val gestureModeReceiver = object : android.content.BroadcastReceiver() {
@@ -94,7 +92,7 @@ class AssistantForegroundService : Service() {
 
         overlayManager = OverlayManager(this)
         deviceControlService = DeviceControlService(this)
-        
+
         ttsManager = TtsManager(this) {
             Log.d("AuraAssistant", "TTS Initialized")
         }
@@ -144,12 +142,23 @@ class AssistantForegroundService : Service() {
         // Show the floating mic bubble (easy one-tap trigger)
         overlayManager.showFloatingBubble { triggerAssistant() }
 
-        // Listen for AI responses from Flutter via MainActivity
-        val aiResponseFilter = IntentFilter(ACTION_AI_RESPONSE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(aiResponseReceiver, aiResponseFilter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(aiResponseReceiver, aiResponseFilter)
+        // Set up static streaming callbacks so MainActivity can push chunks/completion
+        onAiChunk = { chunk ->
+            if (isWaitingForAI) {
+                // Cancel timeout on first chunk
+                aiTimeoutHandler.removeCallbacks(aiTimeoutRunnable)
+                broadcastState("SPEAKING")
+                ttsManager.speakQueued(chunk)
+            }
+        }
+
+        onAiComplete = {
+            isWaitingForAI = false
+            aiTimeoutHandler.removeCallbacks(aiTimeoutRunnable)
+            // Overlay only hides after TTS finishes speaking all queued chunks
+            ttsManager.onAllSpoken {
+                broadcastState("IDLE")
+            }
         }
 
         // Listen for notification action taps and cancel actions
@@ -211,7 +220,7 @@ class AssistantForegroundService : Service() {
             .setContentText("Shake, bubble, or tap Listen to activate")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(openPendingIntent)
-            .addAction(android.R.drawable.ic_btn_speak_now, "🎤 Listen", listenPendingIntent)
+            .addAction(android.R.drawable.ic_btn_speak_now, "\uD83C\uDFA4 Listen", listenPendingIntent)
             .setOngoing(true)
             .build()
 
@@ -331,12 +340,21 @@ class AssistantForegroundService : Service() {
         broadcastState("PROCESSING")
         ttsManager.speak("Let me think about that.")
 
-        val intent = Intent(ACTION_AI_REQUEST)
-        intent.putExtra("query", text)
-        sendBroadcast(intent)
+        // Direct call if Flutter engine is alive, otherwise launch MainActivity
+        val handler = aiRequestHandler
+        if (handler != null) {
+            handler(text)
+        } else {
+            // Flutter engine is dead — store query and launch activity
+            pendingAiQuery = text
+            val launchIntent = Intent(this, com.aura.mobile.aura_mobile.MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(launchIntent)
+        }
 
-        // 30-second timeout in case Flutter engine is not running
-        aiTimeoutHandler.postDelayed(aiTimeoutRunnable, 30_000L)
+        // Timeout in case Flutter engine never responds
+        aiTimeoutHandler.postDelayed(aiTimeoutRunnable, AI_TIMEOUT_MS)
     }
 
     private fun executePendingCommand() {
@@ -395,8 +413,10 @@ class AssistantForegroundService : Service() {
         try { unregisterReceiver(powerButtonDetector) } catch (e: Exception) { }
         try { unregisterReceiver(gestureModeReceiver) } catch (e: Exception) { }
         try { unregisterReceiver(actionReceiver) } catch (e: Exception) { }
-        try { unregisterReceiver(aiResponseReceiver) } catch (e: Exception) { }
         aiTimeoutHandler.removeCallbacks(aiTimeoutRunnable)
+        // Clear static callbacks to prevent stale refs
+        onAiChunk = null
+        onAiComplete = null
     }
 
     override fun onBind(intent: Intent?): IBinder? {
