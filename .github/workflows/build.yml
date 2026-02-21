@@ -59,8 +59,11 @@ jobs:
       - name: Build debug APK
         run: flutter build apk --debug
 
-      - name: Build release APKs
-        run: flutter build apk --release --split-per-abi
+      - name: Build universal release APK
+        run: flutter build apk --release
+
+      - name: Build release AAB
+        run: flutter build appbundle --release
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -68,8 +71,14 @@ jobs:
           name: debug-apk
           path: aura_mobile/build/app/outputs/flutter-apk/app-debug.apk
 
-      - name: Upload release APKs
+      - name: Upload universal release APK
         uses: actions/upload-artifact@v4
         with:
-          name: release-apks
-          path: aura_mobile/build/app/outputs/flutter-apk/app-*-release.apk
+          name: release-apk-universal
+          path: aura_mobile/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-aab
+          path: aura_mobile/build/app/outputs/bundle/release/app-release.aab
