@@ -7,7 +7,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:dio/dio.dart';
 import 'package:aura_mobile/core/services/daily_summary_scheduler.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:intl/intl.dart'; // Ensure intl is available or use DateTime.now().toString()
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {

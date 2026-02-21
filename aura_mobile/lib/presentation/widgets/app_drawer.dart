@@ -16,9 +16,6 @@ class AppDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userState = ref.watch(userProvider);
-    final chatState = ref.watch(chatProvider);
-    
-    // Mock History (replace with real history later)
 
     return Drawer(
       backgroundColor: const Color(0xFF1a1a20), // Dark Obsidian

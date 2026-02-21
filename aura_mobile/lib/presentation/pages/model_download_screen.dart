@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:aura_mobile/ai/run_anywhere_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:aura_mobile/presentation/providers/chat_provider.dart';
 import 'package:aura_mobile/core/providers/ai_providers.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';

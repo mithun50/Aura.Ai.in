@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aura_mobile/ai/run_anywhere_service.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:aura_mobile/ai/run_anywhere_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -23,50 +22,33 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final TextEditingController _nameController = TextEditingController();
   
   // State
-  int _currentPage = 0;
-  bool _analyzing = false;
   DeviceInfo? _deviceInfo;
   List<ModelInfo> _recommendations = [];
   String? _selectedModelId;
 
   Future<void> _analyzeDevice() async {
-    setState(() => _analyzing = true);
-    
     // Artificial delay for UX "Scanning" effect
     await Future.delayed(const Duration(seconds: 2));
-    
+
     final deviceService = ref.read(deviceServiceProvider);
     final recService = ref.read(modelRecommendationServiceProvider);
-    
+
     try {
       final info = await deviceService.analyzeDevice();
       final recs = recService.getRecommendations(info);
-      
+
       if (mounted) {
         setState(() {
           _deviceInfo = info;
           _recommendations = recs;
-          _analyzing = false;
         });
         _pageController.nextPage(
-          duration: const Duration(milliseconds: 500), 
+          duration: const Duration(milliseconds: 500),
           curve: Curves.ease
         );
       }
     } catch (e) {
-      // Handle error (e.g., skip to fallback)
-      print("Analysis failed: $e");
-      setState(() => _analyzing = false);
-    }
-  }
-
-  Future<void> _completeOnboarding() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_name', _nameController.text);
-    await prefs.setBool('is_onboarded', true);
-    
-    if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/chat');
+      debugPrint("Analysis failed: $e");
     }
   }
 

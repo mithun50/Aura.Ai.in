@@ -480,15 +480,4 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  Widget _buildSuggestionChip(String label) {
-    return ActionChip(
-      label: Text(label, style: GoogleFonts.outfit(color: Colors.white70)),
-      backgroundColor: const Color(0xFF1a1a20),
-      side: const BorderSide(color: Colors.white10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      onPressed: () {
-        _controller.text = label;
-      },
-    );
-  }
 }

@@ -36,9 +36,9 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Install Android NDK
+      - name: Install Android NDK & CMake
         run: |
-          yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.0.12433566" || true
+          yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.0.12433566" "cmake;3.31.0" || true
 
       - name: Cache Gradle packages
         uses: actions/cache@v4

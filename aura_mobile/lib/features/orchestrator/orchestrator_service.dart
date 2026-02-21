@@ -143,12 +143,12 @@ class OrchestratorService {
            final matches = await _appControlService.resolveContacts(name);
 
            if (matches.isEmpty) {
-              yield "📨 **Opening SMS to $name...**${smsBody.isNotEmpty ? '\nMessage: \"$smsBody\"' : ''}";
+              yield '📨 **Opening SMS to $name...**${smsBody.isNotEmpty ? '\nMessage: "$smsBody"' : ''}';
               await _appControlService.sendSMS(name, smsBody);
            } else if (matches.length == 1) {
               final number = matches.first.phones.isNotEmpty ? matches.first.phones.first.number : '';
               if (number.isNotEmpty) {
-                 yield "📨 **Opening SMS to ${matches.first.displayName}...**${smsBody.isNotEmpty ? '\nMessage: \"$smsBody\"' : ''}";
+                 yield '📨 **Opening SMS to ${matches.first.displayName}...**${smsBody.isNotEmpty ? '\nMessage: "$smsBody"' : ''}';
                  await _appControlService.sendSMS(number, smsBody);
               } else {
                  yield "❌ Contact ${matches.first.displayName} has no phone number.";

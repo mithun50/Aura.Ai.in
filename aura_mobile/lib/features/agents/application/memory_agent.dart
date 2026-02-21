@@ -36,8 +36,8 @@ class MemoryAgent implements Agent {
         yield "I couldn't find anything relevant in your memory.";
       } else {
         yield "Here's what I found:\n";
-        for (final m in memories) {
-           yield "- \${m.content}\n";
+        for (final memory in memories) {
+           yield "- ${memory.content}\n";
         }
       }
     }

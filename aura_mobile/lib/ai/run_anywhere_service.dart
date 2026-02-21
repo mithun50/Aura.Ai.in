@@ -106,7 +106,6 @@ class RunAnywhere {
     // Initialize Token Listener Globally
     Fllama.instance()?.onTokenStream?.listen((data) {
       if (kDebugMode) print('RunAnywhere: Stream Data: $data');
-      if (data is! Map) return;
 
       if (data['function'] == 'completion') {
         final result = data['result'];

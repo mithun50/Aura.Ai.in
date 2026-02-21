@@ -1,5 +1,4 @@
 
-import 'package:aura_mobile/core/services/duckduckgo_service.dart';
 import 'package:aura_mobile/domain/services/document_service.dart';
 import 'package:aura_mobile/domain/services/memory_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
