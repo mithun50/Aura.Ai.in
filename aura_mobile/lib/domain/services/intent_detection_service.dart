@@ -13,7 +13,8 @@ enum IntentType {
   openCamera,
   dialContact,
   sendSMS,
-  torchControl
+  torchControl,
+  playYoutube
 }
 
 final intentDetectionServiceProvider = Provider((ref) => IntentDetectionService());
@@ -75,14 +76,26 @@ class IntentDetectionService {
       return IntentType.memoryRetrieve;
     }
 
-    // 3️⃣ App Control / Device Actions
-    
+    // 3️⃣ YouTube Play/Search (must come BEFORE openApp to catch compound commands)
+    // Matches: "play X on youtube", "open youtube and play X", "youtube search X", etc.
+    final youtubePlayRegex = RegExp(
+      r'(youtube\s+and\s+(play|search|search\s+for)\s+|play\s+.+\s+on\s+youtube|youtube\s+(play|search)\s+|open\s+youtube\s+and\s+(play|search))',
+      caseSensitive: false,
+    );
+    if (youtubePlayRegex.hasMatch(lowerMessage) ||
+        (lowerMessage.contains('youtube') && (lowerMessage.contains(' play ') || lowerMessage.startsWith('play ')))) {
+      debugPrint("INTENT_DETECTION: Detected YouTube play/search -> playYoutube");
+      return IntentType.playYoutube;
+    }
+
+    // App Control / Device Actions
+
     // Open/Launch (expanded with natural variations)
     final openAppRegex = RegExp(
       r'^(open|launch|start|run|go\s+to|switch\s+to|fire\s+up|pull\s+up|bring\s+up|load)\s+(.+)',
       caseSensitive: false,
     );
-    
+
     // Close/Kill
     final closeAppRegex = RegExp(
       r'^(close|kill|stop|exit|quit|shut\s+down)\s+(.+)',
@@ -92,14 +105,6 @@ class IntentDetectionService {
     if (openAppRegex.hasMatch(lowerMessage)) {
        if (lowerMessage.contains("settings")) return IntentType.openSettings;
        if (lowerMessage.contains("camera")) return IntentType.openCamera;
-       // Detect compound "open youtube and play/search X" — route to webSearch
-       final compoundYoutubeRegex = RegExp(
-         r'youtube\s+and\s+(play|search|search\s+for)\s+',
-         caseSensitive: false,
-       );
-       if (lowerMessage.contains("youtube") && compoundYoutubeRegex.hasMatch(lowerMessage)) {
-         return IntentType.webSearch;
-       }
        return IntentType.openApp;
     }
 
@@ -266,6 +271,50 @@ class IntentDetectionService {
     
     return content;
   }
+  /// Extracts the YouTube search query from compound commands.
+  /// e.g. "open youtube and play toxic teaser" → "toxic teaser"
+  ///      "play toxic teaser on youtube" → "toxic teaser"
+  String extractYouTubeQuery(String message) {
+    final lower = message.trim().toLowerCase();
+
+    // "open youtube and play/search X"
+    final compoundRegex = RegExp(
+      r'youtube\s+and\s+(?:play|search|search\s+for)\s+(.+)',
+      caseSensitive: false,
+    );
+    final compoundMatch = compoundRegex.firstMatch(lower);
+    if (compoundMatch != null) return compoundMatch.group(1)?.trim() ?? message;
+
+    // "play X on youtube"
+    final onYtRegex = RegExp(
+      r'play\s+(.+?)\s+on\s+youtube',
+      caseSensitive: false,
+    );
+    final onYtMatch = onYtRegex.firstMatch(lower);
+    if (onYtMatch != null) return onYtMatch.group(1)?.trim() ?? message;
+
+    // "youtube play/search X"
+    final ytPrefixRegex = RegExp(
+      r'youtube\s+(?:play|search|search\s+for)\s+(.+)',
+      caseSensitive: false,
+    );
+    final ytPrefixMatch = ytPrefixRegex.firstMatch(lower);
+    if (ytPrefixMatch != null) return ytPrefixMatch.group(1)?.trim() ?? message;
+
+    // "play X" (standalone)
+    final playRegex = RegExp(r'^play\s+(.+)', caseSensitive: false);
+    final playMatch = playRegex.firstMatch(lower);
+    if (playMatch != null) return playMatch.group(1)?.trim() ?? message;
+
+    // Fallback: strip known prefixes
+    return lower
+        .replaceAll(RegExp(r'^(open|launch|start)\s+'), '')
+        .replaceAll('youtube', '')
+        .replaceAll(RegExp(r'\s+and\s+'), ' ')
+        .replaceAll(RegExp(r'\s+(on|in)\s+'), ' ')
+        .trim();
+  }
+
   String extractAppName(String message) {
     final clean = message.trim();
     final commandRegex = RegExp(

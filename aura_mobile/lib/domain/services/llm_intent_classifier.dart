@@ -23,7 +23,8 @@ class LLMIntentClassifier {
   static const _systemPrompt =
       'Classify commands. Reply ONLY with: CATEGORY|params\n'
       'Categories: OPEN_APP|name, DIAL_CONTACT|name, SEND_SMS|name|message, '
-      'TORCH|on/off, OPEN_CAMERA, OPEN_SETTINGS|type, WEB_SEARCH|query, NORMAL_CHAT\n'
+      'TORCH|on/off, OPEN_CAMERA, OPEN_SETTINGS|type, WEB_SEARCH|query, '
+      'PLAY_YOUTUBE|query, NORMAL_CHAT\n'
       'Examples:\n'
       '"ring up John" -> DIAL_CONTACT|John\n'
       '"fire up Chrome" -> OPEN_APP|Chrome\n'
@@ -31,6 +32,8 @@ class LLMIntentClassifier {
       '"drop a text to Mom saying hi" -> SEND_SMS|Mom|hi\n'
       '"turn the light on" -> TORCH|on\n'
       '"take me to wifi settings" -> OPEN_SETTINGS|wifi\n'
+      '"open youtube and play toxic teaser" -> PLAY_YOUTUBE|toxic teaser\n'
+      '"play despacito on youtube" -> PLAY_YOUTUBE|despacito\n'
       '"what is quantum physics" -> NORMAL_CHAT';
 
   /// Classify a user message using the on-device LLM.
@@ -114,6 +117,11 @@ class LLMIntentClassifier {
         final query = parts.length > 1 ? parts.sublist(1).join(' ') : '';
         if (query.isEmpty) return null;
         return ClassifiedIntent(IntentType.webSearch, {'query': query});
+
+      case 'PLAY_YOUTUBE':
+        final query = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+        if (query.isEmpty) return null;
+        return ClassifiedIntent(IntentType.playYoutube, {'query': query});
 
       case 'NORMAL_CHAT':
         return ClassifiedIntent(IntentType.normalChat);

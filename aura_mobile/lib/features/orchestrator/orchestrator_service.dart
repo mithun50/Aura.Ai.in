@@ -58,7 +58,12 @@ class OrchestratorService {
     // Voice queries already went through CommandParser; running classifier + chat
     // would cause two LLM inferences and risk hitting the 30s voice timeout.
     ClassifiedIntent? classifiedIntent;
-    if (intent == IntentType.normalChat && !isVoiceQuery) {
+    final bool needsLlmClassification = !isVoiceQuery && (
+      intent == IntentType.normalChat ||
+      // Also classify compound openApp commands (e.g. "open youtube and play X")
+      (intent == IntentType.openApp && message.toLowerCase().contains(' and '))
+    );
+    if (needsLlmClassification) {
       classifiedIntent = await _llmClassifier.classify(message);
       if (classifiedIntent != null && classifiedIntent.type != IntentType.normalChat) {
         debugPrint("ORCHESTRATOR: LLM classified intent -> ${classifiedIntent.type} params=${classifiedIntent.params}");
@@ -186,6 +191,12 @@ class OrchestratorService {
         } catch (e) {
            yield "❌ Failed to toggle flashlight. It might not be available or permitted.";
         }
+        break;
+
+      case IntentType.playYoutube:
+        final query = classifiedIntent?.params['query'] ?? _intentService.extractYouTubeQuery(message);
+        yield "▶️ **Playing '$query' on YouTube...**";
+        await _appControlService.playYouTube(query);
         break;
 
       case IntentType.normalChat:

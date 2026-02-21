@@ -182,6 +182,21 @@ class AppControlService {
     }
   }
 
+  Future<void> playYouTube(String query) async {
+    try {
+      await platform.invokeMethod('playYouTube', {'query': query});
+    } on PlatformException catch (e) {
+      debugPrint("Failed to play YouTube '$query': ${e.message}");
+      // Fallback: open YouTube search in browser
+      final url = 'https://www.youtube.com/results?search_query=${Uri.encodeComponent(query)}';
+      if (await canLaunchUrlString(url)) {
+        await launchUrlString(url);
+      } else {
+        throw "Could not open YouTube for '$query'.";
+      }
+    }
+  }
+
   Future<void> toggleTorch(bool state) async {
     try {
       await platform.invokeMethod('toggleTorch', {'state': state});

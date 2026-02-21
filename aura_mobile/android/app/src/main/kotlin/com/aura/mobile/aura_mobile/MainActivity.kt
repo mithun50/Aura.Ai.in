@@ -171,6 +171,14 @@ class MainActivity: FlutterActivity() {
                         result.error("INVALID", "Number required", null)
                     }
                 }
+                "playYouTube" -> {
+                    val query = call.argument<String>("query")
+                    if (query != null) {
+                        playYouTube(query, result)
+                    } else {
+                        result.error("INVALID", "Query required", null)
+                    }
+                }
                 "toggleTorch" -> {
                     val state = call.argument<Boolean>("state")
                     if (state != null) {
@@ -279,6 +287,28 @@ class MainActivity: FlutterActivity() {
             }
         } else {
             result.error("APP_NOT_FOUND", "Could not find app '$appName'", null)
+        }
+    }
+
+    private fun playYouTube(query: String, result: MethodChannel.Result) {
+        try {
+            val encodedQuery = android.net.Uri.encode(query)
+            val intent = android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery")
+            )
+            intent.setPackage("com.google.android.youtube")
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                startActivity(intent)
+            } catch (e: android.content.ActivityNotFoundException) {
+                // YouTube app not installed, open in browser
+                intent.setPackage(null)
+                startActivity(intent)
+            }
+            result.success("Playing $query on YouTube")
+        } catch (e: Exception) {
+            result.error("YOUTUBE_ERROR", e.message, null)
         }
     }
 
